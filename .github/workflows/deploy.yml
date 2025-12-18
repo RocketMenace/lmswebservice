@@ -10,6 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       image: ${{ steps.meta.outputs.tags }}
+      repo: ${{ steps.repo.outputs.repo }}
 
     steps:
       - name: Checkout code
@@ -28,11 +29,15 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Set lowercase repository name
+        id: repo
+        run: echo "repo=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+
       - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ lower(github.repository) }}
+          images: ghcr.io/${{ steps.repo.outputs.repo }}
           tags: |
             type=ref,event=branch
             type=sha,prefix={{branch}}-
@@ -43,7 +48,7 @@ jobs:
           context: .
           platforms: linux/arm64
           push: true
-          tags: ghcr.io/${{ lower(github.repository) }}:${{ github.sha }}
+          tags: ghcr.io/${{ steps.repo.outputs.repo }}:${{ github.sha }}
 
   deploy:
     needs: build
@@ -55,7 +60,7 @@ jobs:
           HTTP_CODE=$(curl -s -o response.txt -w "%{http_code}" -X POST \
             -H "Content-Type: application/json" \
             -H "X-API-Key: ${{ secrets.LMS_API_KEY }}" \
-            -d '{"image":"ghcr.io/${{ lower(github.repository) }}:${{ github.sha }}","repository":"${{ lower(github.repository) }}"}' \
+            -d '{"image":"ghcr.io/${{ needs.build.outputs.repo }}:${{ github.sha }}","repository":"${{ github.repository }}"}' \
             https://lms-portal.staging.k3scluster.tech/api/deploy-requests)
 
           if [ "$HTTP_CODE" != "200" ]; then
